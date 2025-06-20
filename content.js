@@ -6,6 +6,9 @@ class ChatGPTOrganizerContent {
     this.isInitialized = false
     this.currentChatId = null
     this.addToFolderButton = null
+    this.buttonInjectionTimeout = null
+    this.chatUpdateTimeout = null
+    this.buttonUpdateTimeout = null
 
     this.init()
   }
@@ -148,32 +151,49 @@ class ChatGPTOrganizerContent {
     }
 
     this.observer = new MutationObserver((mutations) => {
-      let shouldUpdate = false
+      let shouldUpdateChats = false
+      let shouldUpdateButton = false
 
       mutations.forEach((mutation) => {
         if (mutation.type === "childList") {
           const target = mutation.target
-          // Check if navigation or chat content changed
+
+          // Check for navigation changes (sidebar)
           if (
             target.matches("nav") ||
             target.closest("nav") ||
             target.querySelector('a[href*="/c/"]') ||
-            target.querySelector('a[href*="/chat/"]') ||
+            target.querySelector('a[href*="/chat/"]')
+          ) {
+            shouldUpdateChats = true
+          }
+
+          // Check for main content changes (chat page)
+          if (
             target.matches("main") ||
             target.closest("main") ||
-            mutation.addedNodes.length > 0
+            target.matches("header") ||
+            target.closest("header") ||
+            target.classList.contains("sticky")
           ) {
-            shouldUpdate = true
+            shouldUpdateButton = true
           }
         }
       })
 
-      if (shouldUpdate) {
-        clearTimeout(this.updateTimeout)
-        this.updateTimeout = setTimeout(() => {
+      // Debounce updates
+      if (shouldUpdateChats) {
+        clearTimeout(this.chatUpdateTimeout)
+        this.chatUpdateTimeout = setTimeout(() => {
           this.detectAndProcessChats()
-          this.addChatPageButton()
         }, 1000)
+      }
+
+      if (shouldUpdateButton) {
+        clearTimeout(this.buttonUpdateTimeout)
+        this.buttonUpdateTimeout = setTimeout(() => {
+          this.addChatPageButton()
+        }, 800)
       }
     })
 
@@ -230,111 +250,69 @@ class ChatGPTOrganizerContent {
 
     if (!chatMatch) {
       // Remove button if not on chat page
-      if (this.addToFolderButton) {
-        this.addToFolderButton.remove()
-        this.addToFolderButton = null
-      }
+      this.removeChatButton()
       return
     }
 
-    this.currentChatId = chatMatch[1] || chatMatch[2]
+    const newChatId = chatMatch[1] || chatMatch[2]
+
+    // Only proceed if chat ID changed or button doesn't exist
+    if (this.currentChatId === newChatId && this.addToFolderButton && document.contains(this.addToFolderButton)) {
+      return // Button already exists for this chat
+    }
+
+    this.currentChatId = newChatId
     console.log("Current chat ID:", this.currentChatId)
 
-    // Remove existing button
+    // Remove existing button before creating new one
+    this.removeChatButton()
+
+    // Wait for page to stabilize before injecting
+    clearTimeout(this.buttonInjectionTimeout)
+    this.buttonInjectionTimeout = setTimeout(() => {
+      this.injectChatButton()
+    }, 500)
+  }
+
+  removeChatButton() {
     if (this.addToFolderButton) {
       this.addToFolderButton.remove()
       this.addToFolderButton = null
     }
-
-    // Wait a bit for the page to fully load
-    setTimeout(() => {
-      this.injectChatButton()
-    }, 1000)
+    // Also remove any orphaned buttons
+    document.querySelectorAll(".chatgpt-organizer-chat-btn").forEach((btn) => btn.remove())
   }
 
   injectChatButton() {
-    // Multiple strategies to find the right container
-    const strategies = [
-      // Strategy 1: Look for the main header with buttons
-      () => {
-        const selectors = [
-          "header",
-          ".sticky.top-0",
-          ".flex.h-14.items-center",
-          ".border-b.border-black\\/10",
-          ".dark\\:border-gray-900\\/50",
-          '[class*="sticky"][class*="top-0"]',
-        ]
-
-        for (const selector of selectors) {
-          const container = document.querySelector(selector)
-          if (container && container.offsetHeight > 0) {
-            // Look for existing button groups within this container
-            const buttonGroup = container.querySelector(
-              ".flex.items-center.gap-1, .flex.gap-1, .flex.items-center, .ml-auto",
-            )
-            if (buttonGroup) {
-              console.log("Found button group in:", selector)
-              return buttonGroup
-            }
-            console.log("Found container:", selector)
-            return container
-          }
-        }
-        return null
-      },
-
-      // Strategy 2: Look for specific button containers
-      () => {
-        const buttonContainers = document.querySelectorAll('div[class*="flex"][class*="items-center"]')
-        for (const container of buttonContainers) {
-          if (container.querySelector("button") && container.offsetHeight > 0) {
-            console.log("Found button container")
-            return container
-          }
-        }
-        return null
-      },
-
-      // Strategy 3: Look for the main content area and create our own container
-      () => {
-        const main = document.querySelector("main")
-        if (main) {
-          console.log("Using main as fallback")
-          return main
-        }
-        return null
-      },
-
-      // Strategy 4: Fallback to body
-      () => {
-        console.log("Using body as last resort")
-        return document.body
-      },
-    ]
-
-    let targetContainer = null
-    for (const strategy of strategies) {
-      targetContainer = strategy()
-      if (targetContainer) break
-    }
-
-    if (!targetContainer) {
-      console.error("Could not find suitable container for button")
+    // Prevent multiple injections
+    if (this.addToFolderButton && document.contains(this.addToFolderButton)) {
       return
     }
 
-    // Create the button with enhanced styling
+    // Strategy 1: Find the header with share/edit buttons
+    const targetContainer = this.findHeaderContainer()
+
+    if (!targetContainer) {
+      console.log("No suitable header container found, trying fallback")
+      return // Don't inject if we can't find proper placement
+    }
+
+    console.log("Injecting button into:", targetContainer.tagName, targetContainer.className)
+
+    // Create the button with proper ChatGPT styling
     this.addToFolderButton = document.createElement("button")
-    this.addToFolderButton.className = "chatgpt-organizer-chat-btn"
+    this.addToFolderButton.className = "chatgpt-organizer-chat-btn btn relative btn-neutral border-0 md:border"
     this.addToFolderButton.innerHTML = `
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M22 19C22 20.1046 21.1046 21 20 21H4C2.89543 21 2 20.1046 2 19V5C2 3.89543 2.89543 3 4 3H9L11 5H20C21.1046 5 22 5.89543 22 7V19Z"/>
-      </svg>
-      <span>Add to Folder</span>
+      <div class="flex w-full items-center justify-center gap-2">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M22 19C22 20.1046 21.1046 21 20 21H4C2.89543 21 2 20.1046 2 19V5C2 3.89543 2.89543 3 4 3H9L11 5H20C21.1046 5 22 5.89543 22 7V19Z"/>
+        </svg>
+        <span class="hidden sm:inline">Add to Folder</span>
+      </div>
     `
     this.addToFolderButton.title = "Add this chat to a folder"
 
+    // Add click handler
     this.addToFolderButton.addEventListener("click", (e) => {
       e.preventDefault()
       e.stopPropagation()
@@ -342,30 +320,65 @@ class ChatGPTOrganizerContent {
       this.showFolderSelector(this.currentChatId, this.addToFolderButton)
     })
 
-    // Different insertion strategies based on container type
-    if (targetContainer === document.body) {
-      // Create a floating button
-      this.addToFolderButton.style.position = "fixed"
-      this.addToFolderButton.style.top = "20px"
-      this.addToFolderButton.style.right = "20px"
-      this.addToFolderButton.style.zIndex = "9999"
-      this.addToFolderButton.style.backgroundColor = "#3b82f6"
-      this.addToFolderButton.style.color = "white"
-      this.addToFolderButton.style.padding = "8px 12px"
-      this.addToFolderButton.style.borderRadius = "8px"
-      this.addToFolderButton.style.border = "none"
-      this.addToFolderButton.style.boxShadow = "0 4px 12px rgba(0,0,0,0.15)"
-    } else if (targetContainer.tagName === "MAIN") {
-      // Create a floating button within main
-      this.addToFolderButton.style.position = "absolute"
-      this.addToFolderButton.style.top = "10px"
-      this.addToFolderButton.style.right = "10px"
-      this.addToFolderButton.style.zIndex = "100"
-      targetContainer.style.position = "relative"
+    // Insert button in the correct position
+    this.insertButtonInContainer(targetContainer)
+  }
+
+  findHeaderContainer() {
+    // Look for the specific header structure in ChatGPT
+    const selectors = [
+      // Main header with buttons
+      ".sticky.top-0.z-10.flex.h-14.items-center.justify-between.bg-white.p-2.font-semibold.text-gray-800.dark\\:bg-gray-800.dark\\:text-gray-100",
+      ".sticky.top-0.z-10.flex.h-14.items-center.justify-between",
+      ".flex.h-14.items-center.justify-between.bg-white.p-2",
+      ".sticky.top-0.z-10",
+      // Fallback selectors
+      "header",
+      ".flex.items-center.justify-between.border-b",
+      ".border-b.border-black\\/10.dark\\:border-gray-900\\/50",
+    ]
+
+    for (const selector of selectors) {
+      const container = document.querySelector(selector)
+      if (container && container.offsetHeight > 0) {
+        // Check if this container has buttons or is suitable for button placement
+        const hasButtons =
+          container.querySelector("button") ||
+          container.querySelector(".btn") ||
+          container.querySelector('[role="button"]')
+
+        if (hasButtons || container.classList.contains("justify-between")) {
+          console.log("Found suitable container:", selector)
+          return container
+        }
+      }
     }
 
-    targetContainer.appendChild(this.addToFolderButton)
-    console.log("Button injected successfully into:", targetContainer.tagName, targetContainer.className)
+    return null
+  }
+
+  insertButtonInContainer(container) {
+    // Find the right side of the header (usually contains share/edit buttons)
+    const rightSide =
+      container.querySelector(".flex.items-center.gap-1") ||
+      container.querySelector(".flex.gap-1") ||
+      container.querySelector(".ml-auto") ||
+      container.querySelector(".flex:last-child")
+
+    if (rightSide) {
+      // Insert at the beginning of the button group
+      rightSide.insertBefore(this.addToFolderButton, rightSide.firstChild)
+      console.log("Inserted button in right side button group")
+    } else {
+      // Create a button container if none exists
+      const buttonContainer = document.createElement("div")
+      buttonContainer.className = "flex items-center gap-1"
+      buttonContainer.appendChild(this.addToFolderButton)
+
+      // Append to the end of the header
+      container.appendChild(buttonContainer)
+      console.log("Created new button container")
+    }
   }
 
   showFolderSelector(chatId, buttonElement) {

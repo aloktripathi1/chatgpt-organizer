@@ -15,6 +15,16 @@ class ChatGPTOrganizer {
     this.render()
     this.updateStats()
     this.loadTheme()
+
+    // Listen for storage changes
+    chrome.storage.onChanged.addListener((changes) => {
+      if (changes.folders || changes.chats) {
+        this.loadData().then(() => {
+          this.render()
+          this.updateStats()
+        })
+      }
+    })
   }
 
   async loadData() {
@@ -23,6 +33,7 @@ class ChatGPTOrganizer {
       this.folders = result.folders || []
       this.chats = result.chats || []
       this.isDarkMode = result.darkMode || false
+      console.log("Loaded data:", { folders: this.folders.length, chats: this.chats.length })
     } catch (error) {
       console.error("Error loading data:", error)
     }
@@ -35,6 +46,7 @@ class ChatGPTOrganizer {
         chats: this.chats,
         darkMode: this.isDarkMode,
       })
+      console.log("Saved data:", { folders: this.folders.length, chats: this.chats.length })
     } catch (error) {
       console.error("Error saving data:", error)
     }
@@ -79,6 +91,7 @@ class ChatGPTOrganizer {
       searchInput.value = ""
       this.handleSearch("")
       clearSearch.style.display = "none"
+      searchInput.focus()
     })
 
     // Dark mode toggle
@@ -96,7 +109,9 @@ class ChatGPTOrganizer {
     })
 
     document.getElementById("importFile").addEventListener("change", (e) => {
-      this.importData(e.target.files[0])
+      if (e.target.files[0]) {
+        this.importData(e.target.files[0])
+      }
     })
 
     // Modal backdrop click
@@ -110,6 +125,16 @@ class ChatGPTOrganizer {
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
         this.closeFolderModal()
+      }
+      if (e.key === "Enter" && document.getElementById("folderModal").style.display === "flex") {
+        this.saveFolderModal()
+      }
+    })
+
+    // Folder name input enter key
+    document.getElementById("folderName").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        this.saveFolderModal()
       }
     })
   }
@@ -131,7 +156,7 @@ class ChatGPTOrganizer {
     }
 
     modal.style.display = "flex"
-    nameInput.focus()
+    setTimeout(() => nameInput.focus(), 100)
   }
 
   closeFolderModal() {
@@ -152,67 +177,107 @@ class ChatGPTOrganizer {
 
     if (!name) {
       nameInput.focus()
+      this.showError("Please enter a folder name")
       return
     }
 
-    if (this.currentEditingFolder) {
-      // Edit existing folder
-      const folderIndex = this.folders.findIndex((f) => f.id === this.currentEditingFolder.id)
-      if (folderIndex !== -1) {
-        this.folders[folderIndex] = {
-          ...this.folders[folderIndex],
+    // Check for duplicate names (excluding current folder being edited)
+    const existingFolder = this.folders.find(
+      (f) =>
+        f.name.toLowerCase() === name.toLowerCase() &&
+        (!this.currentEditingFolder || f.id !== this.currentEditingFolder.id),
+    )
+
+    if (existingFolder) {
+      nameInput.focus()
+      this.showError("A folder with this name already exists")
+      return
+    }
+
+    try {
+      if (this.currentEditingFolder) {
+        // Edit existing folder
+        const folderIndex = this.folders.findIndex((f) => f.id === this.currentEditingFolder.id)
+        if (folderIndex !== -1) {
+          this.folders[folderIndex] = {
+            ...this.folders[folderIndex],
+            name,
+            color: this.selectedColor,
+            updatedAt: new Date().toISOString(),
+          }
+        }
+      } else {
+        // Create new folder
+        const newFolder = {
+          id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
           name,
           color: this.selectedColor,
+          chatIds: [],
+          isPinned: false,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
         }
+        this.folders.push(newFolder)
       }
-    } else {
-      // Create new folder
-      const newFolder = {
-        id: Date.now().toString(),
-        name,
-        color: this.selectedColor,
-        chatIds: [],
-        isPinned: false,
-        createdAt: new Date().toISOString(),
-      }
-      this.folders.push(newFolder)
-    }
 
-    await this.saveData()
-    this.render()
-    this.updateStats()
-    this.closeFolderModal()
-  }
-
-  async deleteFolder(folderId) {
-    if (!confirm("Are you sure you want to delete this folder? Chats will be moved back to unorganized.")) {
-      return
-    }
-
-    const folderIndex = this.folders.findIndex((f) => f.id === folderId)
-    if (folderIndex !== -1) {
-      // Remove folder assignments from chats
-      const folder = this.folders[folderIndex]
-      folder.chatIds.forEach((chatId) => {
-        const chat = this.chats.find((c) => c.id === chatId)
-        if (chat) {
-          chat.folderId = null
-        }
-      })
-
-      this.folders.splice(folderIndex, 1)
       await this.saveData()
       this.render()
       this.updateStats()
+      this.closeFolderModal()
+      this.showSuccess(this.currentEditingFolder ? "Folder updated!" : "Folder created!")
+    } catch (error) {
+      console.error("Error saving folder:", error)
+      this.showError("Error saving folder")
+    }
+  }
+
+  async deleteFolder(folderId) {
+    const folder = this.folders.find((f) => f.id === folderId)
+    if (!folder) return
+
+    const chatCount = this.chats.filter((chat) => chat.folderId === folderId).length
+    const message =
+      chatCount > 0
+        ? `Delete "${folder.name}"? ${chatCount} chat${chatCount !== 1 ? "s" : ""} will be moved back to unorganized.`
+        : `Delete "${folder.name}"?`
+
+    if (!confirm(message)) {
+      return
+    }
+
+    try {
+      const folderIndex = this.folders.findIndex((f) => f.id === folderId)
+      if (folderIndex !== -1) {
+        // Remove folder assignments from chats
+        this.chats.forEach((chat) => {
+          if (chat.folderId === folderId) {
+            chat.folderId = null
+          }
+        })
+
+        this.folders.splice(folderIndex, 1)
+        await this.saveData()
+        this.render()
+        this.updateStats()
+        this.showSuccess("Folder deleted!")
+      }
+    } catch (error) {
+      console.error("Error deleting folder:", error)
+      this.showError("Error deleting folder")
     }
   }
 
   async toggleFolderPin(folderId) {
-    const folder = this.folders.find((f) => f.id === folderId)
-    if (folder) {
-      folder.isPinned = !folder.isPinned
-      await this.saveData()
-      this.render()
+    try {
+      const folder = this.folders.find((f) => f.id === folderId)
+      if (folder) {
+        folder.isPinned = !folder.isPinned
+        folder.updatedAt = new Date().toISOString()
+        await this.saveData()
+        this.render()
+      }
+    } catch (error) {
+      console.error("Error toggling pin:", error)
     }
   }
 
@@ -252,8 +317,10 @@ class ChatGPTOrganizer {
       if (showFolder && hasVisibleChats) {
         const content = folder.querySelector(".folder-content")
         const toggle = folder.querySelector(".folder-toggle")
-        content.classList.add("expanded")
-        toggle.classList.add("expanded")
+        if (content && toggle) {
+          content.classList.add("expanded")
+          toggle.classList.add("expanded")
+        }
       }
     })
   }
@@ -281,8 +348,12 @@ class ChatGPTOrganizer {
     const a = document.createElement("a")
     a.href = url
     a.download = `chatgpt-organizer-${new Date().toISOString().split("T")[0]}.json`
+    document.body.appendChild(a)
     a.click()
+    document.body.removeChild(a)
     URL.revokeObjectURL(url)
+
+    this.showSuccess("Data exported successfully!")
   }
 
   async importData(file) {
@@ -292,22 +363,26 @@ class ChatGPTOrganizer {
       const text = await file.text()
       const data = JSON.parse(text)
 
-      if (data.folders && Array.isArray(data.folders)) {
-        if (confirm("This will replace your current folders and organization. Continue?")) {
-          this.folders = data.folders
-          this.chats = data.chats || []
-          await this.saveData()
-          this.render()
-          this.updateStats()
-          alert("Data imported successfully!")
-        }
-      } else {
-        alert("Invalid file format. Please select a valid export file.")
+      if (!data.folders || !Array.isArray(data.folders)) {
+        this.showError("Invalid file format. Please select a valid export file.")
+        return
+      }
+
+      if (confirm("This will replace your current folders and organization. Continue?")) {
+        this.folders = data.folders
+        this.chats = data.chats || []
+        await this.saveData()
+        this.render()
+        this.updateStats()
+        this.showSuccess("Data imported successfully!")
       }
     } catch (error) {
       console.error("Import error:", error)
-      alert("Error importing file. Please check the file format.")
+      this.showError("Error importing file. Please check the file format.")
     }
+
+    // Reset file input
+    document.getElementById("importFile").value = ""
   }
 
   toggleFolder(folderId) {
@@ -317,21 +392,29 @@ class ChatGPTOrganizer {
     const content = folderElement.querySelector(".folder-content")
     const toggle = folderElement.querySelector(".folder-toggle")
 
-    content.classList.toggle("expanded")
-    toggle.classList.toggle("expanded")
+    if (content && toggle) {
+      content.classList.toggle("expanded")
+      toggle.classList.toggle("expanded")
+    }
   }
 
   async removeChatFromFolder(chatId) {
-    const chat = this.chats.find((c) => c.id === chatId)
-    if (chat) {
-      const folder = this.folders.find((f) => f.id === chat.folderId)
-      if (folder) {
-        folder.chatIds = folder.chatIds.filter((id) => id !== chatId)
+    try {
+      const chat = this.chats.find((c) => c.id === chatId)
+      if (chat) {
+        const folder = this.folders.find((f) => f.id === chat.folderId)
+        if (folder) {
+          folder.chatIds = folder.chatIds.filter((id) => id !== chatId)
+        }
+        chat.folderId = null
+        await this.saveData()
+        this.render()
+        this.updateStats()
+        this.showSuccess("Chat removed from folder!")
       }
-      chat.folderId = null
-      await this.saveData()
-      this.render()
-      this.updateStats()
+    } catch (error) {
+      console.error("Error removing chat:", error)
+      this.showError("Error removing chat from folder")
     }
   }
 
@@ -359,72 +442,72 @@ class ChatGPTOrganizer {
         const folderChats = this.chats.filter((chat) => chat.folderId === folder.id)
 
         return `
-                <div class="folder-item" data-folder-id="${folder.id}">
-                    <div class="folder-header" onclick="organizer.toggleFolder('${folder.id}')">
-                        <div class="folder-color" style="background-color: ${folder.color}"></div>
-                        <div class="folder-info">
-                            <div class="folder-name">
-                                ${folder.isPinned ? "📌 " : ""}${this.escapeHtml(folder.name)}
-                            </div>
-                            <div class="folder-count">${folderChats.length} chat${folderChats.length !== 1 ? "s" : ""}</div>
-                        </div>
-                        <div class="folder-actions" onclick="event.stopPropagation()">
-                            <button class="folder-action-btn" onclick="organizer.toggleFolderPin('${folder.id}')" title="${folder.isPinned ? "Unpin" : "Pin"} folder">
-                                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M12 17V3"/>
-                                    <path d="M5 7L19 7"/>
-                                    <path d="M19 7V13C19 14.1046 18.1046 15 17 15H7C5.89543 15 5 14.1046 5 13V7"/>
-                                </svg>
-                            </button>
-                            <button class="folder-action-btn" onclick="organizer.openFolderModal(organizer.folders.find(f => f.id === '${folder.id}'))" title="Edit folder">
-                                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M11 4H4C2.89543 4 2 4.89543 2 6V18C2 19.1046 2.89543 20 4 20H16C17.1046 20 18 19.1046 18 18V11"/>
-                                    <path d="M18.5 2.5C19.3284 1.67157 20.6716 1.67157 21.5 2.5C22.3284 3.32843 22.3284 4.67157 21.5 5.5L12 15L8 16L9 12L18.5 2.5Z"/>
-                                </svg>
-                            </button>
-                            <button class="folder-action-btn delete" onclick="organizer.deleteFolder('${folder.id}')" title="Delete folder">
-                                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M3 6H5H21"/>
-                                    <path d="M8 6V4C8 2.89543 8.89543 2 10 2H14C15.1046 2 16 2.89543 16 4V6"/>
-                                    <path d="M19 6V20C19 21.1046 18.1046 22 17 22H7C5.89543 22 5 21.1046 5 20V6"/>
-                                    <line x1="10" y1="11" x2="10" y2="17"/>
-                                    <line x1="14" y1="11" x2="14" y2="17"/>
-                                </svg>
-                            </button>
-                        </div>
-                        <button class="folder-toggle">
-                            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <polyline points="9,18 15,12 9,6"/>
-                            </svg>
-                        </button>
-                    </div>
-                    <div class="folder-content">
-                        <div class="chat-list">
-                            ${
-                              folderChats.length === 0
-                                ? '<div style="padding: 16px; text-align: center; color: var(--text-muted); font-size: 12px;">No chats in this folder</div>'
-                                : folderChats
-                                    .map(
-                                      (chat) => `
-                                    <div class="chat-item" data-chat-id="${chat.id}">
-                                        <div class="chat-title" title="${this.escapeHtml(chat.title)}">${this.escapeHtml(chat.title)}</div>
-                                        <div class="chat-actions">
-                                            <button class="folder-action-btn" onclick="organizer.removeChatFromFolder('${chat.id}')" title="Remove from folder">
-                                                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                                    <line x1="18" y1="6" x2="6" y2="18"/>
-                                                    <line x1="6" y1="6" x2="18" y2="18"/>
-                                                </svg>
-                                            </button>
-                                        </div>
-                                    </div>
-                                `,
-                                    )
-                                    .join("")
-                            }
-                        </div>
-                    </div>
+          <div class="folder-item" data-folder-id="${folder.id}">
+            <div class="folder-header" onclick="organizer.toggleFolder('${folder.id}')">
+              <div class="folder-color" style="background-color: ${folder.color}"></div>
+              <div class="folder-info">
+                <div class="folder-name">
+                  ${folder.isPinned ? "📌 " : ""}${this.escapeHtml(folder.name)}
                 </div>
-            `
+                <div class="folder-count">${folderChats.length} chat${folderChats.length !== 1 ? "s" : ""}</div>
+              </div>
+              <div class="folder-actions" onclick="event.stopPropagation()">
+                <button class="folder-action-btn" onclick="organizer.toggleFolderPin('${folder.id}')" title="${folder.isPinned ? "Unpin" : "Pin"} folder">
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 17V3"/>
+                    <path d="M5 7L19 7"/>
+                    <path d="M19 7V13C19 14.1046 18.1046 15 17 15H7C5.89543 15 5 14.1046 5 13V7"/>
+                  </svg>
+                </button>
+                <button class="folder-action-btn" onclick="organizer.openFolderModal(organizer.folders.find(f => f.id === '${folder.id}'))" title="Edit folder">
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M11 4H4C2.89543 4 2 4.89543 2 6V18C2 19.1046 2.89543 20 4 20H16C17.1046 20 18 19.1046 18 18V11"/>
+                    <path d="M18.5 2.5C19.3284 1.67157 20.6716 1.67157 21.5 2.5C22.3284 3.32843 22.3284 4.67157 21.5 5.5L12 15L8 16L9 12L18.5 2.5Z"/>
+                  </svg>
+                </button>
+                <button class="folder-action-btn delete" onclick="organizer.deleteFolder('${folder.id}')" title="Delete folder">
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 6H5H21"/>
+                    <path d="M8 6V4C8 2.89543 8.89543 2 10 2H14C15.1046 2 16 2.89543 16 4V6"/>
+                    <path d="M19 6V20C19 21.1046 18.1046 22 17 22H7C5.89543 22 5 21.1046 5 20V6"/>
+                    <line x1="10" y1="11" x2="10" y2="17"/>
+                    <line x1="14" y1="11" x2="14" y2="17"/>
+                  </svg>
+                </button>
+              </div>
+              <button class="folder-toggle">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="9,18 15,12 9,6"/>
+                </svg>
+              </button>
+            </div>
+            <div class="folder-content">
+              <div class="chat-list">
+                ${
+                  folderChats.length === 0
+                    ? '<div style="padding: 16px; text-align: center; color: var(--text-muted); font-size: 12px;">No chats in this folder</div>'
+                    : folderChats
+                        .map(
+                          (chat) => `
+                        <div class="chat-item" data-chat-id="${chat.id}">
+                          <div class="chat-title" title="${this.escapeHtml(chat.title)}">${this.escapeHtml(chat.title)}</div>
+                          <div class="chat-actions">
+                            <button class="folder-action-btn" onclick="organizer.removeChatFromFolder('${chat.id}')" title="Remove from folder">
+                              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="18" y1="6" x2="6" y2="18"/>
+                                <line x1="6" y1="6" x2="18" y2="18"/>
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+                      `,
+                        )
+                        .join("")
+                }
+              </div>
+            </div>
+          </div>
+        `
       })
       .join("")
   }
@@ -438,6 +521,31 @@ class ChatGPTOrganizer {
     const div = document.createElement("div")
     div.textContent = text
     return div.innerHTML
+  }
+
+  showSuccess(message) {
+    this.showToast(message, "success")
+  }
+
+  showError(message) {
+    this.showToast(message, "error")
+  }
+
+  showToast(message, type = "success") {
+    // Remove existing toasts
+    document.querySelectorAll(".toast").forEach((t) => t.remove())
+
+    const toast = document.createElement("div")
+    toast.className = `toast toast-${type}`
+    toast.textContent = message
+
+    document.body.appendChild(toast)
+
+    setTimeout(() => toast.classList.add("show"), 100)
+    setTimeout(() => {
+      toast.classList.remove("show")
+      setTimeout(() => toast.remove(), 300)
+    }, 3000)
   }
 
   // Method to be called from content script
@@ -456,12 +564,14 @@ class ChatGPTOrganizer {
   }
 }
 
-// Initialize the organizer
-const organizer = new ChatGPTOrganizer()
+// Initialize the organizer when DOM is loaded
+document.addEventListener("DOMContentLoaded", () => {
+  window.organizer = new ChatGPTOrganizer()
+})
 
 // Listen for messages from content script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === "CHATS_UPDATED") {
-    organizer.updateChatsFromPage(message.chats)
+  if (message.type === "CHATS_UPDATED" && window.organizer) {
+    window.organizer.updateChatsFromPage(message.chats)
   }
 })

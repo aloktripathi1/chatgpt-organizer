@@ -5,6 +5,7 @@ class ChatGPTOrganizerContent {
     this.observer = null
     this.isInitialized = false
     this.currentChatId = null
+    this.addToFolderButton = null
 
     this.init()
   }
@@ -19,17 +20,18 @@ class ChatGPTOrganizerContent {
   }
 
   async setup() {
+    console.log("ChatGPT Organizer: Setting up content script")
     await this.loadStorageData()
     this.setupMutationObserver()
     this.detectAndProcessChats()
-    this.addOpenChatButton()
+    this.addChatPageButton()
     this.isInitialized = true
 
     // Re-run detection periodically for dynamic content
     setInterval(() => {
       this.detectAndProcessChats()
-      this.addOpenChatButton()
-    }, 2000)
+      this.addChatPageButton()
+    }, 3000)
   }
 
   async loadStorageData() {
@@ -37,6 +39,7 @@ class ChatGPTOrganizerContent {
       const result = await chrome.storage.local.get(["folders", "chats"])
       this.folders = result.folders || []
       this.chats = result.chats || []
+      console.log("Loaded storage data:", { folders: this.folders.length, chats: this.chats.length })
     } catch (error) {
       console.error("Error loading storage data:", error)
     }
@@ -69,8 +72,8 @@ class ChatGPTOrganizerContent {
       })
     }
 
-    // Add organize buttons to each chat
-    this.addOrganizeButtons()
+    // Add organize buttons to each chat in sidebar
+    this.addSidebarButtons()
   }
 
   getChatElements() {
@@ -83,6 +86,7 @@ class ChatGPTOrganizerContent {
       '.overflow-y-auto a[href*="/c/"]',
       '[data-testid="history-item"]',
       ".relative.grow.overflow-hidden a",
+      'ol li a[href*="/c/"]',
     ]
 
     let elements = []
@@ -149,12 +153,14 @@ class ChatGPTOrganizerContent {
       mutations.forEach((mutation) => {
         if (mutation.type === "childList") {
           const target = mutation.target
-          // Check if navigation or chat list changed
+          // Check if navigation or chat content changed
           if (
             target.matches("nav") ||
             target.closest("nav") ||
             target.querySelector('a[href*="/c/"]') ||
             target.querySelector('a[href*="/chat/"]') ||
+            target.matches("main") ||
+            target.closest("main") ||
             mutation.addedNodes.length > 0
           ) {
             shouldUpdate = true
@@ -166,8 +172,8 @@ class ChatGPTOrganizerContent {
         clearTimeout(this.updateTimeout)
         this.updateTimeout = setTimeout(() => {
           this.detectAndProcessChats()
-          this.addOpenChatButton()
-        }, 500)
+          this.addChatPageButton()
+        }, 1000)
       }
     })
 
@@ -177,12 +183,12 @@ class ChatGPTOrganizerContent {
     })
   }
 
-  addOrganizeButtons() {
+  addSidebarButtons() {
     const chatElements = this.getChatElements()
 
     chatElements.forEach((element) => {
       // Skip if button already exists
-      if (element.querySelector(".chatgpt-organizer-btn") || element.closest(".chatgpt-organizer-processed")) {
+      if (element.querySelector(".chatgpt-organizer-sidebar-btn") || element.closest(".chatgpt-organizer-processed")) {
         return
       }
 
@@ -194,7 +200,7 @@ class ChatGPTOrganizerContent {
 
       // Create organize button
       const button = document.createElement("button")
-      button.className = "chatgpt-organizer-btn"
+      button.className = "chatgpt-organizer-sidebar-btn"
       button.innerHTML = `
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M22 19C22 20.1046 21.1046 21 20 21H4C2.89543 21 2 20.1046 2 19V5C2 3.89543 2.89543 3 4 3H9L11 5H20C21.1046 5 22 5.89543 22 7V19Z"/>
@@ -217,56 +223,87 @@ class ChatGPTOrganizerContent {
     })
   }
 
-  addOpenChatButton() {
-    // Remove existing button
-    const existingBtn = document.querySelector(".chatgpt-organizer-open-chat-btn")
-    if (existingBtn) {
-      existingBtn.remove()
-    }
-
+  addChatPageButton() {
     // Check if we're on a chat page
     const currentUrl = window.location.href
     const chatMatch = currentUrl.match(/\/c\/([^/?]+)|\/chat\/([^/?]+)/)
 
-    if (!chatMatch) return
+    if (!chatMatch) {
+      // Remove button if not on chat page
+      if (this.addToFolderButton) {
+        this.addToFolderButton.remove()
+        this.addToFolderButton = null
+      }
+      return
+    }
 
     this.currentChatId = chatMatch[1] || chatMatch[2]
 
-    // Find suitable container for the button
-    const containers = ["header", ".sticky.top-0", ".flex.items-center.justify-between", ".border-b", "nav + div"]
+    // Remove existing button
+    if (this.addToFolderButton) {
+      this.addToFolderButton.remove()
+      this.addToFolderButton = null
+    }
+
+    // Find the header container with existing buttons
+    const headerContainers = [
+      ".sticky.top-0.z-10",
+      ".sticky.top-0",
+      "header",
+      ".flex.items-center.justify-between",
+      ".border-b",
+      ".flex.h-14.items-center",
+      ".flex.items-center.gap-2",
+    ]
 
     let targetContainer = null
-    for (const selector of containers) {
+    for (const selector of headerContainers) {
       const element = document.querySelector(selector)
       if (element && element.offsetHeight > 0) {
+        // Look for existing button groups
+        const buttonGroup = element.querySelector(".flex.items-center.gap-1, .flex.gap-1, .flex.items-center")
+        if (buttonGroup) {
+          targetContainer = buttonGroup
+          break
+        }
         targetContainer = element
         break
       }
     }
 
     if (!targetContainer) {
-      // Fallback: create floating button
-      targetContainer = document.body
+      console.log("No suitable container found for chat page button")
+      return
     }
 
-    // Create the button
-    const button = document.createElement("button")
-    button.className = "chatgpt-organizer-open-chat-btn"
-    button.innerHTML = `
+    // Create the button that matches ChatGPT's style
+    this.addToFolderButton = document.createElement("button")
+    this.addToFolderButton.className =
+      "chatgpt-organizer-chat-btn flex h-8 items-center gap-2 rounded-lg px-2 text-token-text-secondary hover:bg-token-main-surface-secondary"
+    this.addToFolderButton.innerHTML = `
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M22 19C22 20.1046 21.1046 21 20 21H4C2.89543 21 2 20.1046 2 19V5C2 3.89543 2.89543 3 4 3H9L11 5H20C21.1046 5 22 5.89543 22 7V19Z"/>
       </svg>
-      <span>Add to Folder</span>
+      <span class="hidden sm:inline">Add to Folder</span>
     `
-    button.title = "Add this chat to a folder"
+    this.addToFolderButton.title = "Add this chat to a folder"
 
-    button.addEventListener("click", (e) => {
+    this.addToFolderButton.addEventListener("click", (e) => {
       e.preventDefault()
       e.stopPropagation()
-      this.showFolderSelector(this.currentChatId, button)
+      this.showFolderSelector(this.currentChatId, this.addToFolderButton)
     })
 
-    targetContainer.appendChild(button)
+    // Insert the button into the container
+    if (targetContainer.querySelector("button")) {
+      // Insert after existing buttons
+      const lastButton = Array.from(targetContainer.querySelectorAll("button")).pop()
+      lastButton.parentNode.insertBefore(this.addToFolderButton, lastButton.nextSibling)
+    } else {
+      targetContainer.appendChild(this.addToFolderButton)
+    }
+
+    console.log("Added chat page button to:", targetContainer)
   }
 
   showFolderSelector(chatId, buttonElement) {
@@ -319,11 +356,11 @@ class ChatGPTOrganizerContent {
       </div>
     `
 
-    // Position popup near button
+    // Position popup directly below the button
     const rect = buttonElement.getBoundingClientRect()
     popup.style.position = "fixed"
-    popup.style.top = `${Math.min(rect.bottom + 5, window.innerHeight - 300)}px`
-    popup.style.left = `${Math.min(rect.left, window.innerWidth - 250)}px`
+    popup.style.top = `${rect.bottom + 8}px`
+    popup.style.left = `${Math.max(10, rect.left - 100)}px` // Offset to center better
     popup.style.zIndex = "10000"
 
     document.body.appendChild(popup)
@@ -355,6 +392,8 @@ class ChatGPTOrganizerContent {
 
   async assignChatToFolder(chatId, folderId) {
     try {
+      console.log("Assigning chat to folder:", { chatId, folderId })
+
       // Get current chat title if not in our list
       let chat = this.chats.find((c) => c.id === chatId)
       if (!chat) {
@@ -363,12 +402,20 @@ class ChatGPTOrganizerContent {
 
         if (this.currentChatId === chatId) {
           // We're on the chat page, try to get title from page
-          const titleElement =
-            document.querySelector("h1") ||
-            document.querySelector(".text-lg.font-semibold") ||
-            document.querySelector('[data-testid="chat-title"]')
-          if (titleElement) {
-            title = titleElement.textContent?.trim() || title
+          const titleSelectors = [
+            "h1",
+            ".text-lg.font-semibold",
+            '[data-testid="chat-title"]',
+            ".text-xl.font-semibold",
+            ".font-semibold",
+          ]
+
+          for (const selector of titleSelectors) {
+            const titleElement = document.querySelector(selector)
+            if (titleElement && titleElement.textContent?.trim()) {
+              title = titleElement.textContent.trim()
+              break
+            }
           }
         } else {
           // Try to find in chat list
@@ -399,8 +446,11 @@ class ChatGPTOrganizerContent {
       chat.folderId = folderId
       if (folderId) {
         const folder = this.folders.find((f) => f.id === folderId)
-        if (folder && !folder.chatIds.includes(chatId)) {
-          folder.chatIds.push(chatId)
+        if (folder) {
+          if (!folder.chatIds) folder.chatIds = []
+          if (!folder.chatIds.includes(chatId)) {
+            folder.chatIds.push(chatId)
+          }
         }
       }
 
@@ -409,6 +459,8 @@ class ChatGPTOrganizerContent {
         folders: this.folders,
         chats: this.chats,
       })
+
+      console.log("Successfully saved to storage")
 
       // Show success notification
       this.showNotification(

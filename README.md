@@ -2,7 +2,7 @@
 
 A free and open-source Chrome extension to organize your ChatGPT chats into **custom folders**, similar to the **“Projects”** feature available only in the paid version of ChatGPT. Clean, intuitive, and privacy-respecting.
 
-![ChatGPT Organizer Banner](assets/banner.png)
+![ChatGPT Organizer Banner](banner.png)
 
 ---
 

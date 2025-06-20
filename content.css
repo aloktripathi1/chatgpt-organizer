@@ -36,42 +36,71 @@ a:hover .chatgpt-organizer-sidebar-btn,
   opacity: 1;
 }
 
-/* Chat page button - matches ChatGPT's native button style */
+/* Chat page button - enhanced visibility and positioning */
 .chatgpt-organizer-chat-btn {
-  /* Base styles that match ChatGPT buttons */
-  display: flex;
+  /* Base styles that ensure visibility */
+  display: flex !important;
   align-items: center;
   gap: 8px;
-  height: 32px;
-  padding: 0 8px;
-  border: none;
+  height: 36px;
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
   border-radius: 8px;
-  background-color: transparent;
-  color: var(--text-secondary, #6b7280);
+  background-color: #ffffff;
+  color: #374151;
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
   white-space: nowrap;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  z-index: 1000;
 }
 
 .chatgpt-organizer-chat-btn:hover {
-  background-color: var(--surface-secondary, rgba(0, 0, 0, 0.05));
-  color: var(--text-primary, #374151);
+  background-color: #f9fafb;
+  border-color: #3b82f6;
+  color: #3b82f6;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px);
+}
+
+.chatgpt-organizer-chat-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
 }
 
 /* Dark mode support for chat button */
 [data-theme="dark"] .chatgpt-organizer-chat-btn,
 .dark .chatgpt-organizer-chat-btn,
 html.dark .chatgpt-organizer-chat-btn {
-  color: rgba(255, 255, 255, 0.7);
+  background-color: #1f2937;
+  border-color: #374151;
+  color: #e5e7eb;
 }
 
 [data-theme="dark"] .chatgpt-organizer-chat-btn:hover,
 .dark .chatgpt-organizer-chat-btn:hover,
 html.dark .chatgpt-organizer-chat-btn:hover {
-  background-color: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.9);
+  background-color: #374151;
+  border-color: #3b82f6;
+  color: #60a5fa;
+}
+
+/* Floating button styles for fallback positioning */
+.chatgpt-organizer-chat-btn[style*="position: fixed"],
+.chatgpt-organizer-chat-btn[style*="position: absolute"] {
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%) !important;
+  color: white !important;
+  border: none !important;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4) !important;
+}
+
+.chatgpt-organizer-chat-btn[style*="position: fixed"]:hover,
+.chatgpt-organizer-chat-btn[style*="position: absolute"]:hover {
+  background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%) !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4) !important;
 }
 
 /* Folder selector popup with enhanced styling */

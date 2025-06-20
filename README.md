@@ -29,7 +29,7 @@ OpenAI’s official “Projects” feature is exclusive to ChatGPT Plus users. T
 ### 🧪 Manual Install (Developer Mode)
 
 1. Download or clone this repository:
-   ```bash
+```
    git clone https://github.com/your-username/chatgpt-organizer.git
 ````
 
@@ -66,7 +66,7 @@ This extension does **not collect**, track, or transmit any data. All your folde
 
 ## 📂 Folder Structure
 
-```bash
+```
 chatgpt-organizer/
 ├── manifest.json
 ├── popup.html
@@ -98,6 +98,4 @@ If you find it useful, please consider ⭐ starring the repo to support developm
 
 ## 📃 License
 
-MIT License © 2025 [Your Name](https://github.com/aloktripathi1)
-
-```
+MIT License © 2025

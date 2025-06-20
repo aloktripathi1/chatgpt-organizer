@@ -33,7 +33,7 @@ class ChatGPTOrganizer {
       this.folders = result.folders || []
       this.chats = result.chats || []
       this.isDarkMode = result.darkMode || false
-      console.log("Loaded data:", { folders: this.folders.length, chats: this.chats.length })
+      console.log("Popup loaded data:", { folders: this.folders.length, chats: this.chats.length })
     } catch (error) {
       console.error("Error loading data:", error)
     }
@@ -46,7 +46,7 @@ class ChatGPTOrganizer {
         chats: this.chats,
         darkMode: this.isDarkMode,
       })
-      console.log("Saved data:", { folders: this.folders.length, chats: this.chats.length })
+      console.log("Popup saved data:", { folders: this.folders.length, chats: this.chats.length })
     } catch (error) {
       console.error("Error saving data:", error)
     }
@@ -281,6 +281,33 @@ class ChatGPTOrganizer {
     }
   }
 
+  // Fixed toggle folder function with proper event handling
+  toggleFolder(folderId, event) {
+    if (event) {
+      event.stopPropagation()
+    }
+
+    const folderElement = document.querySelector(`[data-folder-id="${folderId}"]`)
+    if (!folderElement) return
+
+    const content = folderElement.querySelector(".folder-content")
+    const toggle = folderElement.querySelector(".folder-toggle")
+
+    if (content && toggle) {
+      const isExpanded = content.classList.contains("expanded")
+
+      if (isExpanded) {
+        content.classList.remove("expanded")
+        toggle.classList.remove("expanded")
+      } else {
+        content.classList.add("expanded")
+        toggle.classList.add("expanded")
+      }
+
+      console.log(`Folder ${folderId} ${isExpanded ? "collapsed" : "expanded"}`)
+    }
+  }
+
   handleSearch(query) {
     const foldersContent = document.getElementById("foldersContent")
     const folders = foldersContent.querySelectorAll(".folder-item")
@@ -385,19 +412,6 @@ class ChatGPTOrganizer {
     document.getElementById("importFile").value = ""
   }
 
-  toggleFolder(folderId) {
-    const folderElement = document.querySelector(`[data-folder-id="${folderId}"]`)
-    if (!folderElement) return
-
-    const content = folderElement.querySelector(".folder-content")
-    const toggle = folderElement.querySelector(".folder-toggle")
-
-    if (content && toggle) {
-      content.classList.toggle("expanded")
-      toggle.classList.toggle("expanded")
-    }
-  }
-
   async removeChatFromFolder(chatId) {
     try {
       const chat = this.chats.find((c) => c.id === chatId)
@@ -418,6 +432,7 @@ class ChatGPTOrganizer {
     }
   }
 
+  // Enhanced render function with proper event handling
   render() {
     const foldersContent = document.getElementById("foldersContent")
     const emptyState = document.getElementById("emptyState")
@@ -443,7 +458,7 @@ class ChatGPTOrganizer {
 
         return `
           <div class="folder-item" data-folder-id="${folder.id}">
-            <div class="folder-header" onclick="organizer.toggleFolder('${folder.id}')">
+            <div class="folder-header">
               <div class="folder-color" style="background-color: ${folder.color}"></div>
               <div class="folder-info">
                 <div class="folder-name">
@@ -451,7 +466,7 @@ class ChatGPTOrganizer {
                 </div>
                 <div class="folder-count">${folderChats.length} chat${folderChats.length !== 1 ? "s" : ""}</div>
               </div>
-              <div class="folder-actions" onclick="event.stopPropagation()">
+              <div class="folder-actions">
                 <button class="folder-action-btn" onclick="organizer.toggleFolderPin('${folder.id}')" title="${folder.isPinned ? "Unpin" : "Pin"} folder">
                   <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M12 17V3"/>
@@ -475,7 +490,7 @@ class ChatGPTOrganizer {
                   </svg>
                 </button>
               </div>
-              <button class="folder-toggle">
+              <button class="folder-toggle" onclick="organizer.toggleFolder('${folder.id}', event)">
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <polyline points="9,18 15,12 9,6"/>
                 </svg>
@@ -490,7 +505,11 @@ class ChatGPTOrganizer {
                         .map(
                           (chat) => `
                         <div class="chat-item" data-chat-id="${chat.id}">
-                          <div class="chat-title" title="${this.escapeHtml(chat.title)}">${this.escapeHtml(chat.title)}</div>
+                          <div class="chat-title" title="${this.escapeHtml(chat.title)}">
+                            <a href="${chat.url || `https://chat.openai.com/c/${chat.id}`}" target="_blank" style="color: inherit; text-decoration: none;">
+                              ${this.escapeHtml(chat.title)}
+                            </a>
+                          </div>
                           <div class="chat-actions">
                             <button class="folder-action-btn" onclick="organizer.removeChatFromFolder('${chat.id}')" title="Remove from folder">
                               <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

@@ -569,14 +569,21 @@ class ChatGPTOrganizer {
 
   // Method to be called from content script
   async updateChatsFromPage(chats) {
+    console.log("Updating chats from page:", chats.length)
+
     // Merge with existing chats, preserving folder assignments
     const existingChatMap = new Map(this.chats.map((chat) => [chat.id, chat]))
 
     this.chats = chats.map((chat) => {
       const existing = existingChatMap.get(chat.id)
-      return existing ? { ...chat, folderId: existing.folderId } : chat
+      if (existing) {
+        // Preserve folder assignment but update other properties
+        return { ...chat, folderId: existing.folderId }
+      }
+      return chat
     })
 
+    console.log("Merged chats:", this.chats.length)
     await this.saveData()
     this.render()
     this.updateStats()
@@ -590,7 +597,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
 // Listen for messages from content script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  console.log("Popup received message:", message)
+
   if (message.type === "CHATS_UPDATED" && window.organizer) {
     window.organizer.updateChatsFromPage(message.chats)
+  }
+
+  if (message.type === "FOLDER_UPDATED" && window.organizer) {
+    // Reload data and re-render when folders are updated from content script
+    window.organizer.loadData().then(() => {
+      window.organizer.render()
+      window.organizer.updateStats()
+    })
   }
 })

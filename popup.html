@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChatGPT Organizer</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="header-content">
+                <h1 class="title">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 7V5C3 3.89543 3.89543 3 5 3H19C20.1046 3 21 3.89543 21 5V7"/>
+                        <path d="M3 7H21L19 19H5L3 7Z"/>
+                        <path d="M8 7V5"/>
+                        <path d="M16 7V5"/>
+                    </svg>
+                    ChatGPT Organizer
+                </h1>
+                <div class="header-actions">
+                    <button id="darkModeToggle" class="icon-btn" title="Toggle Dark Mode">
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                        </svg>
+                    </button>
+                    <button id="exportBtn" class="icon-btn" title="Export Folders">
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15V19C21 20.1046 20.1046 21 19 21H5C3.89543 21 3 20.1046 3 19V15"/>
+                            <path d="M7 10L12 15L17 10"/>
+                            <path d="M12 15V3"/>
+                        </svg>
+                    </button>
+                    <button id="importBtn" class="icon-btn" title="Import Folders">
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15V19C21 20.1046 20.1046 21 19 21H5C3.89543 21 3 20.1046 3 19V15"/>
+                            <path d="M17 8L12 3L7 8"/>
+                            <path d="M12 3V15"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <div class="search-container">
+            <div class="search-box">
+                <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"/>
+                    <path d="M21 21L16.65 16.65"/>
+                </svg>
+                <input type="text" id="searchInput" placeholder="Search chats and folders..." />
+                <button id="clearSearch" class="clear-btn" style="display: none;">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <div class="create-folder">
+            <button id="createFolderBtn" class="create-btn">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 5V19"/>
+                    <path d="M5 12H19"/>
+                </svg>
+                Create New Folder
+            </button>
+        </div>
+
+        <div class="folders-container">
+            <div id="foldersContent" class="folders-content">
+                <!-- Folders will be dynamically inserted here -->
+            </div>
+            <div id="emptyState" class="empty-state" style="display: none;">
+                <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 19C22 20.1046 21.1046 21 20 21H4C2.89543 21 2 20.1046 2 19V5C2 3.89543 2.89543 3 4 3H9L11 5H20C21.1046 5 22 5.89543 22 7V19Z"/>
+                </svg>
+                <p>No folders yet</p>
+                <p class="empty-subtitle">Create your first folder to organize your chats</p>
+            </div>
+        </div>
+
+        <div class="stats">
+            <div class="stat-item">
+                <span class="stat-label">Folders:</span>
+                <span id="folderCount" class="stat-value">0</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Organized Chats:</span>
+                <span id="chatCount" class="stat-value">0</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for creating/editing folders -->
+    <div id="folderModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modalTitle">Create New Folder</h3>
+                <button id="closeModal" class="close-btn">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="folderName">Folder Name</label>
+                    <input type="text" id="folderName" placeholder="Enter folder name..." maxlength="50" />
+                </div>
+                <div class="form-group">
+                    <label for="folderColor">Color</label>
+                    <div class="color-picker">
+                        <div class="color-option" data-color="#3b82f6" style="background-color: #3b82f6;"></div>
+                        <div class="color-option" data-color="#10b981" style="background-color: #10b981;"></div>
+                        <div class="color-option" data-color="#f59e0b" style="background-color: #f59e0b;"></div>
+                        <div class="color-option" data-color="#ef4444" style="background-color: #ef4444;"></div>
+                        <div class="color-option" data-color="#8b5cf6" style="background-color: #8b5cf6;"></div>
+                        <div class="color-option" data-color="#06b6d4" style="background-color: #06b6d4;"></div>
+                        <div class="color-option" data-color="#84cc16" style="background-color: #84cc16;"></div>
+                        <div class="color-option" data-color="#f97316" style="background-color: #f97316;"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="cancelBtn" class="btn btn-secondary">Cancel</button>
+                <button id="saveBtn" class="btn btn-primary">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden file input for import -->
+    <input type="file" id="importFile" accept=".json" style="display: none;" />
+
+    <script src="popup.js"></script>
+</body>
+</html>

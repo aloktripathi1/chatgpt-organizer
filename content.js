@@ -238,6 +238,7 @@ class ChatGPTOrganizerContent {
     }
 
     this.currentChatId = chatMatch[1] || chatMatch[2]
+    console.log("Current chat ID:", this.currentChatId)
 
     // Remove existing button
     if (this.addToFolderButton) {
@@ -245,65 +246,126 @@ class ChatGPTOrganizerContent {
       this.addToFolderButton = null
     }
 
-    // Find the header container with existing buttons
-    const headerContainers = [
-      ".sticky.top-0.z-10",
-      ".sticky.top-0",
-      "header",
-      ".flex.items-center.justify-between",
-      ".border-b",
-      ".flex.h-14.items-center",
-      ".flex.items-center.gap-2",
+    // Wait a bit for the page to fully load
+    setTimeout(() => {
+      this.injectChatButton()
+    }, 1000)
+  }
+
+  injectChatButton() {
+    // Multiple strategies to find the right container
+    const strategies = [
+      // Strategy 1: Look for the main header with buttons
+      () => {
+        const selectors = [
+          "header",
+          ".sticky.top-0",
+          ".flex.h-14.items-center",
+          ".border-b.border-black\\/10",
+          ".dark\\:border-gray-900\\/50",
+          '[class*="sticky"][class*="top-0"]',
+        ]
+
+        for (const selector of selectors) {
+          const container = document.querySelector(selector)
+          if (container && container.offsetHeight > 0) {
+            // Look for existing button groups within this container
+            const buttonGroup = container.querySelector(
+              ".flex.items-center.gap-1, .flex.gap-1, .flex.items-center, .ml-auto",
+            )
+            if (buttonGroup) {
+              console.log("Found button group in:", selector)
+              return buttonGroup
+            }
+            console.log("Found container:", selector)
+            return container
+          }
+        }
+        return null
+      },
+
+      // Strategy 2: Look for specific button containers
+      () => {
+        const buttonContainers = document.querySelectorAll('div[class*="flex"][class*="items-center"]')
+        for (const container of buttonContainers) {
+          if (container.querySelector("button") && container.offsetHeight > 0) {
+            console.log("Found button container")
+            return container
+          }
+        }
+        return null
+      },
+
+      // Strategy 3: Look for the main content area and create our own container
+      () => {
+        const main = document.querySelector("main")
+        if (main) {
+          console.log("Using main as fallback")
+          return main
+        }
+        return null
+      },
+
+      // Strategy 4: Fallback to body
+      () => {
+        console.log("Using body as last resort")
+        return document.body
+      },
     ]
 
     let targetContainer = null
-    for (const selector of headerContainers) {
-      const element = document.querySelector(selector)
-      if (element && element.offsetHeight > 0) {
-        // Look for existing button groups
-        const buttonGroup = element.querySelector(".flex.items-center.gap-1, .flex.gap-1, .flex.items-center")
-        if (buttonGroup) {
-          targetContainer = buttonGroup
-          break
-        }
-        targetContainer = element
-        break
-      }
+    for (const strategy of strategies) {
+      targetContainer = strategy()
+      if (targetContainer) break
     }
 
     if (!targetContainer) {
-      console.log("No suitable container found for chat page button")
+      console.error("Could not find suitable container for button")
       return
     }
 
-    // Create the button that matches ChatGPT's style
+    // Create the button with enhanced styling
     this.addToFolderButton = document.createElement("button")
-    this.addToFolderButton.className =
-      "chatgpt-organizer-chat-btn flex h-8 items-center gap-2 rounded-lg px-2 text-token-text-secondary hover:bg-token-main-surface-secondary"
+    this.addToFolderButton.className = "chatgpt-organizer-chat-btn"
     this.addToFolderButton.innerHTML = `
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M22 19C22 20.1046 21.1046 21 20 21H4C2.89543 21 2 20.1046 2 19V5C2 3.89543 2.89543 3 4 3H9L11 5H20C21.1046 5 22 5.89543 22 7V19Z"/>
       </svg>
-      <span class="hidden sm:inline">Add to Folder</span>
+      <span>Add to Folder</span>
     `
     this.addToFolderButton.title = "Add this chat to a folder"
 
     this.addToFolderButton.addEventListener("click", (e) => {
       e.preventDefault()
       e.stopPropagation()
+      console.log("Button clicked, showing folder selector")
       this.showFolderSelector(this.currentChatId, this.addToFolderButton)
     })
 
-    // Insert the button into the container
-    if (targetContainer.querySelector("button")) {
-      // Insert after existing buttons
-      const lastButton = Array.from(targetContainer.querySelectorAll("button")).pop()
-      lastButton.parentNode.insertBefore(this.addToFolderButton, lastButton.nextSibling)
-    } else {
-      targetContainer.appendChild(this.addToFolderButton)
+    // Different insertion strategies based on container type
+    if (targetContainer === document.body) {
+      // Create a floating button
+      this.addToFolderButton.style.position = "fixed"
+      this.addToFolderButton.style.top = "20px"
+      this.addToFolderButton.style.right = "20px"
+      this.addToFolderButton.style.zIndex = "9999"
+      this.addToFolderButton.style.backgroundColor = "#3b82f6"
+      this.addToFolderButton.style.color = "white"
+      this.addToFolderButton.style.padding = "8px 12px"
+      this.addToFolderButton.style.borderRadius = "8px"
+      this.addToFolderButton.style.border = "none"
+      this.addToFolderButton.style.boxShadow = "0 4px 12px rgba(0,0,0,0.15)"
+    } else if (targetContainer.tagName === "MAIN") {
+      // Create a floating button within main
+      this.addToFolderButton.style.position = "absolute"
+      this.addToFolderButton.style.top = "10px"
+      this.addToFolderButton.style.right = "10px"
+      this.addToFolderButton.style.zIndex = "100"
+      targetContainer.style.position = "relative"
     }
 
-    console.log("Added chat page button to:", targetContainer)
+    targetContainer.appendChild(this.addToFolderButton)
+    console.log("Button injected successfully into:", targetContainer.tagName, targetContainer.className)
   }
 
   showFolderSelector(chatId, buttonElement) {
@@ -394,6 +456,9 @@ class ChatGPTOrganizerContent {
     try {
       console.log("Assigning chat to folder:", { chatId, folderId })
 
+      // Reload fresh data from storage
+      await this.loadStorageData()
+
       // Get current chat title if not in our list
       let chat = this.chats.find((c) => c.id === chatId)
       if (!chat) {
@@ -408,14 +473,21 @@ class ChatGPTOrganizerContent {
             '[data-testid="chat-title"]',
             ".text-xl.font-semibold",
             ".font-semibold",
+            "title",
           ]
 
           for (const selector of titleSelectors) {
             const titleElement = document.querySelector(selector)
             if (titleElement && titleElement.textContent?.trim()) {
               title = titleElement.textContent.trim()
+              console.log("Found title:", title)
               break
             }
+          }
+
+          // Fallback: try to get from document title
+          if (title === "Untitled Chat" && document.title && !document.title.includes("ChatGPT")) {
+            title = document.title.split(" | ")[0] || "Untitled Chat"
           }
         } else {
           // Try to find in chat list
@@ -432,13 +504,16 @@ class ChatGPTOrganizerContent {
           folderId: null,
         }
         this.chats.push(chat)
+        console.log("Created new chat:", chat)
       }
 
       // Remove from previous folder
       if (chat.folderId) {
         const prevFolder = this.folders.find((f) => f.id === chat.folderId)
         if (prevFolder) {
+          prevFolder.chatIds = prevFolder.chatIds || []
           prevFolder.chatIds = prevFolder.chatIds.filter((id) => id !== chatId)
+          console.log("Removed from previous folder:", prevFolder.name)
         }
       }
 
@@ -451,16 +526,24 @@ class ChatGPTOrganizerContent {
           if (!folder.chatIds.includes(chatId)) {
             folder.chatIds.push(chatId)
           }
+          console.log("Added to folder:", folder.name, "Total chats:", folder.chatIds.length)
         }
+      } else {
+        console.log("Removed from all folders")
       }
 
-      // Save to storage
-      await chrome.storage.local.set({
+      // Save to storage with error handling
+      const saveData = {
         folders: this.folders,
         chats: this.chats,
-      })
+      }
 
-      console.log("Successfully saved to storage")
+      console.log("Saving data:", saveData)
+      await chrome.storage.local.set(saveData)
+
+      // Verify save
+      const verification = await chrome.storage.local.get(["folders", "chats"])
+      console.log("Verification - saved successfully:", verification)
 
       // Show success notification
       this.showNotification(
@@ -470,6 +553,13 @@ class ChatGPTOrganizerContent {
 
       // Update storage data
       await this.loadStorageData()
+
+      // Notify popup about changes
+      chrome.runtime.sendMessage({
+        type: "FOLDER_UPDATED",
+        folders: this.folders,
+        chats: this.chats,
+      })
     } catch (error) {
       console.error("Error assigning chat to folder:", error)
       this.showNotification("Error updating folder", "error")

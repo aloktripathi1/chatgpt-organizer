@@ -98,4 +98,4 @@ If you find it useful, please consider ⭐ starring the repo to support developm
 
 ## 📃 License
 
-MIT License © 2025 [Your Name](https://github.com/aloktripathi1)
+MIT License © 2025

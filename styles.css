@@ -185,10 +185,16 @@
   transition: border-color 0.15s ease;
 }
 
+.folder-input-group input[type="text"]::placeholder {
+  color: var(--folder-text);
+  opacity: 0.7;
+}
+
 .folder-input-group input[type="text"]:focus {
   outline: none;
   border-color: var(--folder-accent);
   box-shadow: 0 0 0 3px rgba(16, 163, 127, 0.1);
+  color: var(--folder-text);
 }
 
 .folder-input-group input[type="color"] {
